@@ -62,7 +62,7 @@ export function JoinRoomScreen({
   const [hasMicPermission, setHasMicPermission] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const isValid = roomInput.trim().length === 6 && usernameInput.trim().length > 0 && /^\d{6}$/.test(roomInput);
+
 
   useEffect(() => {
     setBackendUrlInput(backendUrl);
