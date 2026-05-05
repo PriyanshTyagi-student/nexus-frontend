@@ -1,5 +1,4 @@
-i
-h'use client';
+'use client';
 
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -29,7 +28,6 @@ async function requestMicrophonePermission(): Promise<MicPermissionResult> {
 
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     console.log('[MIC] Permission granted');
-    // Stop all tracks to release the mic
     stream.getTracks().forEach(track => track.stop());
     return {
       ok: true,
@@ -64,7 +62,7 @@ export function JoinRoomScreen({
   const [hasMicPermission, setHasMicPermission] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
-  const isValid = roomInput.trim().length > 0 && usernameInput.trim().length > 0;
+  const isValid = roomInput.trim().length === 6 && usernameInput.trim().length > 0 && /^\d{6}$/.test(roomInput);
 
   useEffect(() => {
     setBackendUrlInput(backendUrl);
@@ -163,42 +161,6 @@ export function JoinRoomScreen({
           Secure glassmorphism walkie-talkie communication
         </p>
 
-        {/* Mode toggle */}
-        <div className="grid grid-cols-2 gap-2 mb-6 rounded-2xl border border-white/10 bg-white/5 p-1 backdrop-blur-xl">
-          <button
-            type="button"
-            onClick={() => {
-              console.log('clicked');
-              handleModeToggle('join');
-            }}
-            className={cn(
-              'relative z-20 pointer-events-auto flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 font-medium transition-all duration-300 touch-manipulation active:scale-95',
-              mode === 'join'
-                ? 'bg-white/15 text-foreground shadow-lg shadow-cyan-500/10 ring-1 ring-white/15'
-                : 'text-muted-foreground hover:bg-white/5'
-            )}
-          >
-            <LogIn className="w-4 h-4" />
-            <span className="text-sm">Join</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              console.log('clicked');
-              handleModeToggle('create');
-            }}
-            className={cn(
-              'relative z-20 pointer-events-auto flex min-h-12 items-center justify-center gap-2 rounded-xl px-4 py-3 font-medium transition-all duration-300 touch-manipulation active:scale-95',
-              mode === 'create'
-                ? 'bg-white/15 text-foreground shadow-lg shadow-fuchsia-500/10 ring-1 ring-white/15'
-                : 'text-muted-foreground hover:bg-white/5'
-            )}
-          >
-            <Plus className="w-4 h-4" />
-            <span className="text-sm">Create</span>
-          </button>
-        </div>
-
         {/* Form */}
         <div className="relative z-20 space-y-4">
           <div className="rounded-2xl border border-white/10 bg-white/5 p-3">
@@ -273,29 +235,34 @@ export function JoinRoomScreen({
           ) : null}
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-foreground">\n              Secret Code\n            </label>
+            <label className="mb-2 block text-sm font-medium text-foreground">
+              Secret Code (6 digits)
+            </label>
             <input
-              type="text"
+              type="number"
+              inputMode="numeric"
+              maxLength={6}
               value={roomInput}
               onChange={(e) => {
-                setRoomInput(e.target.value);
-                console.log('[INPUT] Room updated:', e.target.value);
+                const value = e.target.value.replace(/\D/g, '').slice(0,6);
+                setRoomInput(value);
+                console.log('[INPUT] Code updated:', value);
               }}
               onKeyDown={handleKeyPress}
               autoCapitalize="none"
               autoCorrect="off"
               autoComplete="off"
-              inputMode="text"
-              placeholder="Enter 6-digit code..."
+              placeholder="123456"
               style={{
-                fontSize: '16px', // Prevent iOS auto-zoom
+                fontSize: '16px',
               }}
               className={cn(
                 'w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-3.5 text-foreground placeholder:text-muted-foreground',
                 'backdrop-blur-xl transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-400/30',
                 'text-base shadow-inner shadow-black/10',
                 'relative z-20 touch-manipulation pointer-events-auto',
-                isLoading && 'opacity-75'
+                isLoading && 'opacity-75',
+                roomInput.length !== 6 && 'border-yellow-400/50'
               )}
             />
           </div>
@@ -318,7 +285,7 @@ export function JoinRoomScreen({
               inputMode="text"
               placeholder="Enter your name..."
               style={{
-                fontSize: '16px', // Prevent iOS auto-zoom
+                fontSize: '16px',
               }}
               className={cn(
                 'w-full rounded-2xl border border-white/10 bg-white/8 px-4 py-3.5 text-foreground placeholder:text-muted-foreground',
@@ -335,13 +302,13 @@ export function JoinRoomScreen({
             disabled={!isValid || isLoading}
             onClick={() => {
               console.log('clicked');
-              console.log('[BUTTON] Clicked! valid=', isValid, 'loading=', isLoading, 'mode=', mode);
+              console.log('[BUTTON] Clicked! valid=', isValid, 'loading=', isLoading);
               if (isValid && !isLoading) {
                 mode === 'join' ? handleJoin() : handleCreate();
               }
             }}
             style={{
-              fontSize: '16px', // Ensure readable on mobile
+              fontSize: '16px',
             }}
             className={cn(
               'w-full h-14 sm:min-h-12 rounded-2xl px-4 font-semibold text-white text-base',
@@ -360,9 +327,10 @@ export function JoinRoomScreen({
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground mt-6 leading-5">
-          Press & hold to transmit. Release to listen.
+          Enter 6-digit code. Press & hold to transmit.
         </p>
       </div>
     </div>
   );
 }
+
