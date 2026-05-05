@@ -1,4 +1,5 @@
-'use client';
+i
+h'use client';
 
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
@@ -272,9 +273,7 @@ export function JoinRoomScreen({
           ) : null}
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-foreground">
-              {mode === 'join' ? 'Room ID' : 'Room Name'}
-            </label>
+            <label className="mb-2 block text-sm font-medium text-foreground">\n              Secret Code\n            </label>
             <input
               type="text"
               value={roomInput}
@@ -287,7 +286,7 @@ export function JoinRoomScreen({
               autoCorrect="off"
               autoComplete="off"
               inputMode="text"
-              placeholder={mode === 'join' ? 'Enter room ID...' : 'Create a room name...'}
+              placeholder="Enter 6-digit code..."
               style={{
                 fontSize: '16px', // Prevent iOS auto-zoom
               }}
