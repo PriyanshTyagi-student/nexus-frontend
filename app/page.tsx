@@ -34,6 +34,35 @@ type Notice = {
   tone: 'success' | 'error' | 'info';
 };
 
+const USER_ID_STORAGE_KEY = 'nexus.userId';
+const SESSION_STORAGE_KEY = 'nexus.session';
+
+function getStoredUserId() {
+  if (typeof window === 'undefined') {
+    return '';
+  }
+
+  const existingUserId = window.localStorage.getItem(USER_ID_STORAGE_KEY);
+  if (existingUserId) {
+    return existingUserId;
+  }
+
+  const nextUserId = crypto.randomUUID();
+  window.localStorage.setItem(USER_ID_STORAGE_KEY, nextUserId);
+  return nextUserId;
+}
+
+function saveSession(roomId: string, name: string) {
+  window.localStorage.setItem(
+    SESSION_STORAGE_KEY,
+    JSON.stringify({ roomId, name })
+  );
+}
+
+function clearSession() {
+  window.localStorage.removeItem(SESSION_STORAGE_KEY);
+}
+
 export default function Home() {
   const {
     emit,
@@ -55,6 +84,22 @@ export default function Home() {
   const [error, setError] = useState<string>('');
   const [notices, setNotices] = useState<Notice[]>([]);
   const noticeTimers = useRef<Record<string, number>>({});
+  const localStreamRef = useRef<MediaStream | null>(null);
+  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const pendingIceCandidatesRef = useRef<Map<string, RTCIceCandidateInit[]>>(
+    new Map()
+  );
+  const remoteAudioRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const roomNameRef = useRef('');
+  const userIdRef = useRef('');
+
+  useEffect(() => {
+    roomNameRef.current = roomName;
+  }, [roomName]);
+
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
 
   const pushNotice = useCallback(
     (notice: Omit<Notice, 'id'>) => {
@@ -81,13 +126,187 @@ export default function Home() {
     setNotices((current) => current.filter((item) => item.id !== id));
   }, []);
 
+  const setLocalAudioEnabled = useCallback((enabled: boolean) => {
+    localStreamRef.current?.getAudioTracks().forEach((track) => {
+      track.enabled = enabled;
+    });
+  }, []);
+
+  const ensureLocalStream = useCallback(async () => {
+    if (localStreamRef.current) {
+      return localStreamRef.current;
+    }
+
+    if (!navigator.mediaDevices?.getUserMedia) {
+      throw new Error('Microphone access is not available in this browser.');
+    }
+
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((track) => {
+      track.enabled = false;
+    });
+    localStreamRef.current = stream;
+    return stream;
+  }, []);
+
+  const getOrCreateRemoteAudio = useCallback((socketId: string) => {
+    const existingAudio = remoteAudioRef.current.get(socketId);
+    if (existingAudio) {
+      return existingAudio;
+    }
+
+    const audio = new Audio();
+    audio.autoplay = true;
+    audio.playsInline = true;
+    audio.dataset.socketId = socketId;
+    remoteAudioRef.current.set(socketId, audio);
+    return audio;
+  }, []);
+
+  const closePeerConnection = useCallback((socketId: string) => {
+    const peerConnection = peerConnectionsRef.current.get(socketId);
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnectionsRef.current.delete(socketId);
+    }
+
+    pendingIceCandidatesRef.current.delete(socketId);
+
+    const audio = remoteAudioRef.current.get(socketId);
+    if (audio) {
+      audio.pause();
+      audio.srcObject = null;
+      remoteAudioRef.current.delete(socketId);
+    }
+  }, []);
+
+  const closeAllPeerConnections = useCallback(() => {
+    peerConnectionsRef.current.forEach((_, socketId) => {
+      closePeerConnection(socketId);
+    });
+  }, [closePeerConnection]);
+
+  const stopLocalStream = useCallback(() => {
+    localStreamRef.current?.getTracks().forEach((track) => track.stop());
+    localStreamRef.current = null;
+  }, []);
+
+  const addRemoteIceCandidate = useCallback(
+    async (socketId: string, candidate: RTCIceCandidateInit) => {
+      const peerConnection = peerConnectionsRef.current.get(socketId);
+      if (!peerConnection?.remoteDescription) {
+        const pendingCandidates =
+          pendingIceCandidatesRef.current.get(socketId) || [];
+        pendingCandidates.push(candidate);
+        pendingIceCandidatesRef.current.set(socketId, pendingCandidates);
+        return;
+      }
+
+      await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+    },
+    []
+  );
+
+  const flushPendingIceCandidates = useCallback(async (socketId: string) => {
+    const peerConnection = peerConnectionsRef.current.get(socketId);
+    const pendingCandidates = pendingIceCandidatesRef.current.get(socketId);
+
+    if (!peerConnection?.remoteDescription || !pendingCandidates?.length) {
+      return;
+    }
+
+    pendingIceCandidatesRef.current.delete(socketId);
+    await Promise.all(
+      pendingCandidates.map((candidate) =>
+        peerConnection.addIceCandidate(new RTCIceCandidate(candidate))
+      )
+    );
+  }, []);
+
   useEffect(() => {
+    setUserId(getStoredUserId());
+
     return () => {
       Object.values(noticeTimers.current).forEach((timerId) => {
         window.clearTimeout(timerId);
       });
+      closeAllPeerConnections();
+      stopLocalStream();
     };
-  }, []);
+  }, [closeAllPeerConnections, stopLocalStream]);
+
+  const createPeerConnection = useCallback(
+    async (targetSocketId: string, shouldCreateOffer = false) => {
+      if (!targetSocketId) {
+        return null;
+      }
+
+      const existingPeerConnection =
+        peerConnectionsRef.current.get(targetSocketId);
+      if (existingPeerConnection) {
+        return existingPeerConnection;
+      }
+
+      const localStream = await ensureLocalStream();
+      const peerConnection = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      });
+
+      peerConnectionsRef.current.set(targetSocketId, peerConnection);
+
+      localStream.getTracks().forEach((track) => {
+        peerConnection.addTrack(track, localStream);
+      });
+
+      peerConnection.onicecandidate = (event) => {
+        if (!event.candidate || !roomNameRef.current) {
+          return;
+        }
+
+        emit('webrtc-ice-candidate', {
+          roomId: roomNameRef.current,
+          targetSocketId,
+          candidate: event.candidate,
+        });
+      };
+
+      peerConnection.ontrack = (event) => {
+        const [remoteStream] = event.streams;
+        if (!remoteStream) {
+          return;
+        }
+
+        const audio = getOrCreateRemoteAudio(targetSocketId);
+        audio.srcObject = remoteStream;
+        audio.play().catch((error) => {
+          console.warn('[WEBRTC] Remote audio playback blocked:', error);
+        });
+      };
+
+      peerConnection.onconnectionstatechange = () => {
+        if (
+          peerConnection.connectionState === 'failed' ||
+          peerConnection.connectionState === 'closed' ||
+          peerConnection.connectionState === 'disconnected'
+        ) {
+          closePeerConnection(targetSocketId);
+        }
+      };
+
+      if (shouldCreateOffer && roomNameRef.current) {
+        const offer = await peerConnection.createOffer();
+        await peerConnection.setLocalDescription(offer);
+        emit('webrtc-offer', {
+          roomId: roomNameRef.current,
+          targetSocketId,
+          offer,
+        });
+      }
+
+      return peerConnection;
+    },
+    [closePeerConnection, emit, ensureLocalStream, getOrCreateRemoteAudio]
+  );
 
   // Handle user-joined event
   useEffect(() => {
@@ -104,27 +323,33 @@ export default function Home() {
           isConnected: true,
         },
       ]);
+
+      createPeerConnection(data.socketId).catch((error) => {
+        console.error('[WEBRTC] Failed to prepare peer:', error);
+      });
     });
 
     return () => off('user-joined');
-  }, [on, off]);
+  }, [createPeerConnection, on, off]);
 
   // Handle user-left event
   useEffect(() => {
     on('user-left', (data) => {
       console.log('[EVENT] User left:', data);
       setUsers((prev) => prev.filter((u) => u.socketId !== data.socketId));
+      closePeerConnection(data.socketId);
     });
 
     return () => off('user-left');
-  }, [on, off]);
+  }, [closePeerConnection, on, off]);
 
   // Handle room-users event (initial list)
   useEffect(() => {
     on('room-users', (data) => {
       console.log('[EVENT] Room users:', data.users);
+      const roomUsers = Array.isArray(data.users) ? data.users : [];
       setUsers(
-        data.users.map((u: any) => ({
+        roomUsers.map((u: any) => ({
           socketId: u.socketId,
           userId: u.userId,
           name: u.name,
@@ -133,10 +358,16 @@ export default function Home() {
           isConnected: true,
         }))
       );
+
+      roomUsers.forEach((user: any) => {
+        createPeerConnection(user.socketId, true).catch((error) => {
+          console.error('[WEBRTC] Failed to create offer:', error);
+        });
+      });
     });
 
     return () => off('room-users');
-  }, [on, off]);
+  }, [createPeerConnection, on, off]);
 
   // Handle receive-message event
   useEffect(() => {
@@ -145,18 +376,36 @@ export default function Home() {
       setMessages((prev) => [
         ...prev,
         {
-          id: `msg-${Date.now()}-${Math.random()}`,
-          sender: data.name,
+          id: data.id || `msg-${Date.now()}-${Math.random()}`,
+          sender: data.name || data.userId,
           userId: data.userId,
           message: data.message,
           timestamp: new Date(data.timestamp),
-          isOwn: data.socketId === socket?.id,
+          isOwn: data.userId === userId || data.socketId === socket?.id,
         },
       ]);
     });
 
     return () => off('receive-message');
-  }, [on, off, socket?.id]);
+  }, [on, off, socket?.id, userId]);
+
+  useEffect(() => {
+    on('previous-messages', (data) => {
+      const previousMessages = Array.isArray(data?.messages) ? data.messages : [];
+      setMessages(
+        previousMessages.map((message: any) => ({
+          id: message.id || `msg-${message.timestamp}-${message.userId}`,
+          sender: message.name || message.userId,
+          userId: message.userId,
+          message: message.message,
+          timestamp: new Date(message.timestamp),
+          isOwn: message.userId === userId,
+        }))
+      );
+    });
+
+    return () => off('previous-messages');
+  }, [on, off, userId]);
 
   // Handle user-speaking event
   useEffect(() => {
@@ -173,6 +422,92 @@ export default function Home() {
 
     return () => off('user-speaking');
   }, [on, off]);
+
+  useEffect(() => {
+    on('webrtc-offer', async (data) => {
+      try {
+        const fromSocketId = data?.fromSocketId;
+        const offer = data?.offer;
+        if (!fromSocketId || !offer) {
+          return;
+        }
+
+        const peerConnection = await createPeerConnection(fromSocketId);
+        if (!peerConnection) {
+          return;
+        }
+
+        await peerConnection.setRemoteDescription(
+          new RTCSessionDescription(offer)
+        );
+        await flushPendingIceCandidates(fromSocketId);
+        const answer = await peerConnection.createAnswer();
+        await peerConnection.setLocalDescription(answer);
+
+        emit('webrtc-answer', {
+          roomId: roomNameRef.current,
+          targetSocketId: fromSocketId,
+          answer,
+        });
+      } catch (error) {
+        console.error('[WEBRTC] Failed to handle offer:', error);
+      }
+    });
+
+    return () => off('webrtc-offer');
+  }, [createPeerConnection, emit, flushPendingIceCandidates, on, off]);
+
+  useEffect(() => {
+    on('webrtc-answer', async (data) => {
+      try {
+        const fromSocketId = data?.fromSocketId;
+        const answer = data?.answer;
+        if (!fromSocketId || !answer) {
+          return;
+        }
+
+        const peerConnection =
+          peerConnectionsRef.current.get(fromSocketId);
+        if (!peerConnection) {
+          return;
+        }
+
+        await peerConnection.setRemoteDescription(
+          new RTCSessionDescription(answer)
+        );
+        await flushPendingIceCandidates(fromSocketId);
+      } catch (error) {
+        console.error('[WEBRTC] Failed to handle answer:', error);
+      }
+    });
+
+    return () => off('webrtc-answer');
+  }, [flushPendingIceCandidates, on, off]);
+
+  useEffect(() => {
+    on('webrtc-ice-candidate', async (data) => {
+      try {
+        const fromSocketId = data?.fromSocketId;
+        const candidate = data?.candidate;
+        if (!fromSocketId || !candidate) {
+          return;
+        }
+
+        const peerConnection =
+          peerConnectionsRef.current.get(fromSocketId) ||
+          (await createPeerConnection(fromSocketId));
+        if (!peerConnection) {
+          return;
+        }
+
+        await addRemoteIceCandidate(fromSocketId, candidate);
+      } catch (error) {
+        console.error('[WEBRTC] Failed to add ICE candidate:', error);
+      }
+    });
+
+    return () => off('webrtc-ice-candidate');
+  }, [addRemoteIceCandidate, createPeerConnection, on, off]);
 
   // Handle connection error
   useEffect(() => {
@@ -201,6 +536,17 @@ export default function Home() {
     return true;
   }, [ensureConnection, pushNotice]);
 
+  const finishRoomEntry = useCallback(
+    (cleanRoomId: string, name: string) => {
+      setRoomName(cleanRoomId);
+      setUsername(name);
+      setState('communicating');
+      setError('');
+      saveSession(cleanRoomId, name);
+    },
+    []
+  );
+
   const handleJoinRoom = useCallback(
     async (roomId: string, name: string) => {
       const isConnected = await verifyBackendConnection();
@@ -208,14 +554,33 @@ export default function Home() {
         return;
       }
 
-      const newUserId = crypto.randomUUID();
+      try {
+        await ensureLocalStream();
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Microphone permission is required for voice chat.';
+        setError(message);
+        pushNotice({
+          title: 'Microphone unavailable',
+          description: message,
+          tone: 'error',
+        });
+        return;
+      }
+
+      const activeUserId = userId || getStoredUserId();
+      setUserId(activeUserId);
       const cleanRoomId = roomId.trim().toLowerCase();
+      roomNameRef.current = cleanRoomId;
+      setMessages([]);
 
       emit(
         'join-room',
         {
           roomId: cleanRoomId,
-          userId: newUserId,
+          userId: activeUserId,
           name,
         },
         (response?: { success?: boolean; error?: string }) => {
@@ -230,12 +595,7 @@ export default function Home() {
             return;
           }
 
-          setUserId(newUserId);
-          setRoomName(cleanRoomId);
-          setUsername(name);
-          setMessages([]);
-          setState('communicating');
-          setError('');
+          finishRoomEntry(cleanRoomId, name);
           pushNotice({
             title: 'Room joined',
             description: `You joined ${cleanRoomId}.`,
@@ -245,7 +605,14 @@ export default function Home() {
         }
       );
     },
-    [emit, verifyBackendConnection, pushNotice]
+    [
+      emit,
+      ensureLocalStream,
+      finishRoomEntry,
+      pushNotice,
+      userId,
+      verifyBackendConnection,
+    ]
   );
 
   const handleCreateRoom = useCallback(
@@ -255,14 +622,33 @@ export default function Home() {
         return;
       }
 
-      const newUserId = crypto.randomUUID();
+      try {
+        await ensureLocalStream();
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : 'Microphone permission is required for voice chat.';
+        setError(message);
+        pushNotice({
+          title: 'Microphone unavailable',
+          description: message,
+          tone: 'error',
+        });
+        return;
+      }
+
+      const activeUserId = userId || getStoredUserId();
+      setUserId(activeUserId);
       const cleanRoomId = roomId.trim().toLowerCase();
+      roomNameRef.current = cleanRoomId;
+      setMessages([]);
 
       emit(
         'create-room',
         {
           roomId: cleanRoomId,
-          userId: newUserId,
+          userId: activeUserId,
           name,
         },
         (response?: { success?: boolean; error?: string }) => {
@@ -277,12 +663,7 @@ export default function Home() {
             return;
           }
 
-          setUserId(newUserId);
-          setRoomName(cleanRoomId);
-          setUsername(name);
-          setMessages([]);
-          setState('communicating');
-          setError('');
+          finishRoomEntry(cleanRoomId, name);
           pushNotice({
             title: 'Room created',
             description: `Room ${cleanRoomId} is now live.`,
@@ -292,8 +673,39 @@ export default function Home() {
         }
       );
     },
-    [emit, pushNotice, verifyBackendConnection]
+    [
+      emit,
+      ensureLocalStream,
+      finishRoomEntry,
+      pushNotice,
+      userId,
+      verifyBackendConnection,
+    ]
   );
+
+  useEffect(() => {
+    if (!userId || state !== 'joining') {
+      return;
+    }
+
+    const savedSession = window.localStorage.getItem(SESSION_STORAGE_KEY);
+    if (!savedSession) {
+      return;
+    }
+
+    try {
+      const session = JSON.parse(savedSession) as {
+        roomId?: string;
+        name?: string;
+      };
+
+      if (session.roomId && session.name) {
+        handleJoinRoom(session.roomId, session.name);
+      }
+    } catch {
+      clearSession();
+    }
+  }, [handleJoinRoom, state, userId]);
 
   const handleSendMessage = useCallback(
     async (messageText: string) => {
@@ -325,6 +737,22 @@ export default function Home() {
       return;
     }
 
+    try {
+      await ensureLocalStream();
+      setLocalAudioEnabled(true);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'Microphone permission is required to talk.';
+      pushNotice({
+        title: 'Microphone unavailable',
+        description: message,
+        tone: 'error',
+      });
+      return;
+    }
+
     const cleanRoomId = roomName.trim().toLowerCase();
     setIsSpeaking(true);
 
@@ -336,7 +764,15 @@ export default function Home() {
     });
 
     console.log('[ACTION] Started speaking');
-  }, [emit, roomName, userId, verifyBackendConnection]);
+  }, [
+    emit,
+    ensureLocalStream,
+    pushNotice,
+    roomName,
+    setLocalAudioEnabled,
+    userId,
+    verifyBackendConnection,
+  ]);
 
   const handleTalkEnd = useCallback(async () => {
     const isConnected = await verifyBackendConnection();
@@ -345,6 +781,7 @@ export default function Home() {
     }
 
     const cleanRoomId = roomName.trim().toLowerCase();
+    setLocalAudioEnabled(false);
     setIsSpeaking(false);
 
     // Emit speaking event to backend
@@ -355,7 +792,7 @@ export default function Home() {
     });
 
     console.log('[ACTION] Stopped speaking');
-  }, [emit, roomName, userId, verifyBackendConnection]);
+  }, [emit, roomName, setLocalAudioEnabled, userId, verifyBackendConnection]);
 
   const handleLeaveRoom = useCallback(async () => {
     const isConnected = await verifyBackendConnection();
@@ -374,13 +811,23 @@ export default function Home() {
     setState('joining');
     setRoomName('');
     setUsername('');
-    setUserId('');
     setUsers([]);
     setMessages([]);
     setIsSpeaking(false);
+    setLocalAudioEnabled(false);
+    closeAllPeerConnections();
+    stopLocalStream();
+    clearSession();
 
     console.log('[ACTION] Left room');
-  }, [emit, roomName, verifyBackendConnection]);
+  }, [
+    closeAllPeerConnections,
+    emit,
+    roomName,
+    setLocalAudioEnabled,
+    stopLocalStream,
+    verifyBackendConnection,
+  ]);
 
   const handleBackendUrlChange = useCallback(
     (url: string) => {
