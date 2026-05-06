@@ -13,17 +13,18 @@ interface User {
 
 interface UsersSectionProps {
   users?: User[];
+  totalCount?: number;
 }
 
-export function UsersSection({ users = [] }: UsersSectionProps) {
+export function UsersSection({ users = [], totalCount = users.length }: UsersSectionProps) {
   return (
     <div className="flex items-center gap-4 p-4 border-b border-border">
       <h2 className="text-sm font-semibold text-muted-foreground min-w-fit">
-        Online ({users.length})
+        Online ({totalCount})
       </h2>
       <div className="flex-1 flex items-center gap-2 overflow-x-auto pb-1">
         {users.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No users connected</p>
+          <p className="text-xs text-muted-foreground">No other users connected</p>
         ) : (
           users.map((user) => (
             <div key={user.socketId} className="flex-shrink-0">

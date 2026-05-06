@@ -49,10 +49,7 @@ export function Header({
 
         {/* Right side - Mute button */}
         <button
-          onClick={() => {
-            console.log('clicked');
-            onToggleMute?.();
-          }}
+          onClick={onToggleMute}
           className={cn(
             'relative z-20 pointer-events-auto min-h-11 min-w-11 rounded-2xl border transition-all duration-200 touch-manipulation backdrop-blur-xl',
             'border-white/10 bg-white/8 hover:bg-white/12',
@@ -70,3 +67,4 @@ export function Header({
     </header>
   );
 }
+

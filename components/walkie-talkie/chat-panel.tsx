@@ -85,10 +85,7 @@ export function ChatPanel({
               )}
             />
             <button
-              onClick={() => {
-                console.log('clicked');
-                handleSendMessage();
-              }}
+              onClick={handleSendMessage}
               className={cn(
                 'relative z-20 pointer-events-auto min-h-11 min-w-11 rounded-2xl bg-gradient-to-r from-cyan-400 to-indigo-500 px-3 py-2.5 text-white',
                 'transition-transform hover:scale-[1.02] active:scale-[0.98]',
@@ -104,10 +101,7 @@ export function ChatPanel({
 
       {/* Toggle Button */}
       <button
-        onClick={() => {
-          console.log('clicked');
-          setIsOpen(!isOpen);
-        }}
+        onClick={() => setIsOpen(!isOpen)}
         className={cn(
           'relative z-20 pointer-events-auto w-full flex items-center justify-center gap-2 border-t border-white/10',
           'bg-white/8 text-foreground backdrop-blur-2xl transition-colors hover:bg-white/12',
@@ -125,3 +119,4 @@ export function ChatPanel({
     </div>
   );
 }
+

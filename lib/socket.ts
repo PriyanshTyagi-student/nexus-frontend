@@ -19,18 +19,28 @@ function normalizeBackendUrl(url: string): string {
 
 function getDefaultBackendUrl(): string {
   const configuredUrl = process.env.NEXT_PUBLIC_SOCKET_URL?.trim();
-
-  if (configuredUrl && !configuredUrl.includes('localhost') && !configuredUrl.includes('127.0.0.1')) {
+  if (configuredUrl) {
     return normalizeBackendUrl(configuredUrl);
   }
 
-  if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol || 'http:';
-    const hostname = window.location.hostname || 'localhost';
-    return `${protocol}//${hostname}:${DEFAULT_BACKEND_PORT}`;
+  if (typeof window === 'undefined') {
+    return `http://localhost:${DEFAULT_BACKEND_PORT}`;
   }
 
-  return normalizeBackendUrl(configuredUrl || `http://localhost:${DEFAULT_BACKEND_PORT}`);
+  const protocol = window.location.protocol || 'http:';
+  const host = window.location.hostname;
+
+  if (host) {
+    return `${protocol}//${host}:${DEFAULT_BACKEND_PORT}`;
+  }
+
+  const isAndroid = /Android/i.test(navigator.userAgent || '');
+  if (isAndroid) {
+    // Android emulator loopback to host machine.
+    return `http://10.0.2.2:${DEFAULT_BACKEND_PORT}`;
+  }
+
+  return `http://localhost:${DEFAULT_BACKEND_PORT}`;
 }
 
 export function getBackendUrl(): string {

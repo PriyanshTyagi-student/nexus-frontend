@@ -50,8 +50,10 @@ export function JoinRoomScreen({
   const handleSubmit = mode === 'create' ? handleCreate : handleJoin;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      <div className="max-w-md w-full space-y-6">
+        <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-900 via-indigo-900/80 to-slate-900 relative z-50">
+
+          <div className="max-w-md w-full space-y-6 relative z-50 bg-black/30 backdrop-blur-xl rounded-3xl p-8 border border-white/20 shadow-2xl">
+
         <div className="text-center">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-cyan-400 to-purple-500 bg-clip-text text-transparent mb-2">
             Nexus
@@ -69,7 +71,8 @@ export function JoinRoomScreen({
               type="url"
               value={backendUrlInput}
               onChange={(e) => setBackendUrlInput(e.target.value)}
-              className="flex-1 px-4 py-2 rounded-xl bg-white/10 border border-white/20 focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+              className="flex-1 px-4 py-2 rounded-xl bg-white/20 border border-white/30 focus:ring-2 focus:ring-cyan-400/80 focus:border-transparent shadow-lg"
+
               placeholder="http://localhost:5000"
             />
             <button
@@ -96,7 +99,8 @@ export function JoinRoomScreen({
             type="text"
             value={roomInput}
             onChange={(e) => setRoomInput(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 focus:ring-2 focus:ring-cyan-500 focus:border-transparent text-lg font-mono tracking-wider"
+            className="w-full px-4 py-3 rounded-xl bg-white/20 border border-white/30 focus:ring-2 focus:ring-cyan-400/80 focus:border-transparent text-lg font-mono tracking-wider shadow-lg"
+
             placeholder="Enter room code"
           />
         </div>
@@ -110,7 +114,8 @@ export function JoinRoomScreen({
             type="text"
             value={usernameInput}
             onChange={(e) => setUsernameInput(e.target.value)}
-            className="w-full px-4 py-3 rounded-xl bg-white/10 border border-white/20 focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+            className="w-full px-4 py-3 rounded-xl bg-white/20 border border-white/30 focus:ring-2 focus:ring-cyan-400/80 focus:border-transparent shadow-lg"
+
             placeholder="Your name"
           />
         </div>
@@ -122,8 +127,9 @@ export function JoinRoomScreen({
             className={cn(
               'flex-1 py-3 px-4 rounded-lg font-medium transition-all',
               mode === 'create' 
-                ? 'bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg' 
-                : 'text-gray-400 hover:text-white'
+                ? 'bg-gradient-to-r from-cyan-500/90 to-blue-500/90 text-white shadow-xl animate-glow-primary' 
+                : 'text-gray-200 hover:text-white hover:bg-white/10'
+
             )}
           >
             Create Room
@@ -133,8 +139,9 @@ export function JoinRoomScreen({
             className={cn(
               'flex-1 py-3 px-4 rounded-lg font-medium transition-all',
               mode === 'join' 
-                ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg' 
-                : 'text-gray-400 hover:text-white'
+                ? 'bg-gradient-to-r from-purple-500/90 to-pink-500/90 text-white shadow-xl animate-glow-secondary' 
+                : 'text-gray-200 hover:text-white hover:bg-white/10'
+
             )}
           >
             Join Room
@@ -145,7 +152,8 @@ export function JoinRoomScreen({
         <button
           onClick={handleSubmit}
           disabled={!isValid || isLoading}
-          className="w-full py-4 px-6 rounded-2xl font-semibold text-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-2xl hover:shadow-emerald-500/25 disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 transition-all duration-200"
+          className="w-full py-4 px-6 rounded-2xl font-semibold text-lg bg-gradient-to-r from-emerald-500/95 to-teal-500/95 text-white shadow-2xl hover:shadow-emerald-500/50 ring-2 ring-emerald-400/50 animate-glow-primary disabled:opacity-50 disabled:cursor-not-allowed transform hover:-translate-y-0.5 transition-all duration-200"
+
         >
           {isLoading ? (
             <Loader2 className="w-6 h-6 animate-spin mx-auto" />

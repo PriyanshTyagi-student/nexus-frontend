@@ -32,10 +32,13 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  themeColor: '#00D9FF',
+  themeColor: '#00f0ff',
+  viewportFit: 'cover'
 }
+
+// Fixed duplicate metadata
+
+
 
 export default function RootLayout({
   children,

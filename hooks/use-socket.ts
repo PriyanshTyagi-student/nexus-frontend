@@ -11,6 +11,7 @@ import {
   resetBackendUrl,
   setBackendUrl,
 } from '@/lib/socket';
+import { BACKEND_URL } from '@/lib/config';
 
 /**
  * Custom hook to use Socket.io in components

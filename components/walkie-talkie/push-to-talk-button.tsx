@@ -21,7 +21,6 @@ export function PushToTalkButton({
 
   const startTalking = () => {
     if (isDisabled || isPressed) return;
-    console.log('clicked');
     setIsPressed(true);
     onTalkStart?.();
   };

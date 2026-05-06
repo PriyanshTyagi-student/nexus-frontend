@@ -1,0 +1,22 @@
+{
+  "name": "Nexus Walkie-Talkie",
+  "short_name": "Nexus",
+  "description": "Futuristic real-time voice communication",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0e27",
+  "theme_color": "#00f0ff",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/icon-dark-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    }
+  ]
+}
+

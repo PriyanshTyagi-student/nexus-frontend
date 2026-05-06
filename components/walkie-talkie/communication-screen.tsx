@@ -63,16 +63,17 @@ export function CommunicationScreen({
         isConnected={true}
         isMuted={isMuted}
         onToggleMute={() => setIsMuted(!isMuted)}
-        userCount={users.length}
+        userCount={users.length + 1}
       />
 
       {/* Users Section */}
-      <UsersSection users={users} />
+      <UsersSection users={users} totalCount={users.length + 1} />
 
       {/* Main Content */}
       <div className="relative z-10 flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto overflow-x-hidden px-4 py-4 sm:px-6">
         {/* Empty state or main PTT interface */}
-        <div className="relative z-20 flex w-full max-w-md flex-col items-center gap-6 rounded-[2rem] border border-white/10 bg-white/8 px-4 py-6 shadow-[0_20px_80px_rgba(0,0,0,0.28)] backdrop-blur-2xl sm:px-8 sm:py-8 max-h-[70vh] overflow-y-auto pointer-events-auto">
+            <div className="relative z-20 flex w-full max-w-[90vw] sm:max-w-md flex-col items-center gap-6 rounded-[2rem] border border-cyan-300/15 bg-white/10 px-4 py-6 shadow-[0_20px_80px_rgba(0,0,0,0.3)] backdrop-blur-3xl sm:px-8 sm:py-8 max-h-[70vh] overflow-y-auto pointer-events-auto animate-glass-shift animate-glow-border">
+
           <div className="text-center">
             <p className="mb-2 text-xs sm:text-sm text-muted-foreground">Current Speaker</p>
             <p className="text-xl sm:text-2xl font-bold text-cyan-300 truncate px-2">
@@ -90,19 +91,19 @@ export function CommunicationScreen({
 
           {/* Quick stats */}
           <div className="grid grid-cols-3 gap-3 sm:gap-4 text-center w-full">
-            <div className="p-2 rounded-lg bg-white/5">
+            <div className="p-2 rounded-lg bg-white/10 backdrop-blur-xl border border-white/10">
               <p className="text-lg sm:text-2xl font-bold text-cyan-300">
                 {users.length + 1}
               </p>
               <p className="text-xs text-muted-foreground">Connected</p>
             </div>
-            <div className="p-2 rounded-lg bg-white/5">
+            <div className="p-2 rounded-lg bg-white/10 backdrop-blur-xl border border-white/10">
               <p className="text-lg sm:text-2xl font-bold text-fuchsia-300">
                 {messages.length}
               </p>
               <p className="text-xs text-muted-foreground">Messages</p>
             </div>
-            <div className="p-2 rounded-lg bg-white/5">
+            <div className="p-2 rounded-lg bg-white/10 backdrop-blur-xl border border-white/10">
               <p
                 className={cn(
                   'text-lg sm:text-2xl font-bold',
@@ -127,10 +128,8 @@ export function CommunicationScreen({
       {/* Leave Room Button */}
       <div className="relative z-20 flex-shrink-0 border-t border-white/10 bg-white/8 p-2 sm:p-3 backdrop-blur-2xl flex gap-2 pointer-events-auto">
         <button
-          onClick={() => {
-            console.log('clicked');
-            onLeaveRoom?.();
-          }}
+          onClick={onLeaveRoom}
+
           className={cn(
             'flex-1 flex items-center justify-center gap-2',
             'min-h-11 sm:min-h-12 px-4 py-2.5 rounded-2xl',
